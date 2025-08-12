@@ -46,22 +46,29 @@ namespace FidoAutoCad.Forms
             }
             catch (Exception ex) { MessageBox.Show(ex.Message + ex.HResult, "Error"); }
         }
-        private void detachExcel_Click(object sender, EventArgs e)
+        public void detachExcel_Click(object sender, EventArgs e)
         {
             try
             {
                 if (excelApp == null) { UpdateExcelStatus(false, "NA"); MessageBox.Show("Successfully detached"); return; }
 
                 excelApp.Visible = true;
-                //if (excelApp.Workbooks.Count > 0) { throw new Exception("Worbook is open in excel, close workbook first"); }
-
-                DialogResult res = MessageBox.Show("Initiate close Execl?", "Warning", MessageBoxButtons.YesNoCancel);
-                if (res == DialogResult.Yes) { excelApp.Quit(); }
-                else if (res == DialogResult.No) { } // Don't do anything, just release later
-                else { throw new Exception("Operation terminated by user."); }
-
-                //Marshal.FinalReleaseComObject(excelApp);
                 InternalReleaseExcel();
+            }
+            catch (Exception ex) when (ex.HResult == -2147023174)
+            {
+                InternalReleaseExcel();
+            }
+            catch (Exception ex) { MessageBox.Show(ex.Message, "Error"); }
+        }
+
+        public void detachExcel_Auto(object sender, EventArgs e)
+        {
+            // To be called upon autocad shutdown
+            try
+            {
+                if (excelApp == null) { return; }
+                InternalReleaseExcel(false);
             }
             catch (Exception ex) when (ex.HResult == -2147023174)
             {
@@ -133,6 +140,9 @@ namespace FidoAutoCad.Forms
         private void InternalReleaseExcel(bool showMsgBox = true)
         {
             UnsubscribeToExcelStatus();
+            try { Marshal.ReleaseComObject(excelApp); }
+            catch { }
+            
             excelApp = null;
             UpdateExcelStatus(false, "NA");
             if (showMsgBox) { MessageBox.Show("Successfully detached"); }
@@ -177,5 +187,19 @@ namespace FidoAutoCad.Forms
         }
         #endregion
         #endregion
+
+        #region Checks
+        private bool CheckIfExcelIsAttached(bool throwError = true)
+        {
+            if (excelApp == null)
+            {
+                if (throwError) { throw new Exception("No instance of excel attached"); }
+                return false;
+            }
+            else { return true; }
+        }
+        #endregion
+
+
     }
 }

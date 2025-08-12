@@ -1,4 +1,7 @@
-﻿using Microsoft.Office.Interop.Excel;
+﻿using Autodesk.AutoCAD.DatabaseServices;
+using Autodesk.AutoCAD.EditorInput;
+using Autodesk.AutoCAD.Geometry;
+using Microsoft.Office.Interop.Excel;
 using System;
 using System.Collections.Generic;
 using System.ComponentModel;
@@ -9,7 +12,6 @@ using System.Security.Permissions;
 using System.Text;
 using System.Threading.Tasks;
 using System.Windows.Forms;
-
 using ListBox = System.Windows.Forms.ListBox;
 
 namespace FidoAutoCad.SharedForms
@@ -179,6 +181,7 @@ namespace FidoAutoCad.SharedForms
     }
     public class ListItem
     {
+        // Represents an item in the ListSelector form
         public string name { get; set; }
         public bool isActive { get; set; }
         public int initialOrderNum { get; set; }
@@ -198,3 +201,4 @@ namespace FidoAutoCad.SharedForms
         }
     }
 }
+

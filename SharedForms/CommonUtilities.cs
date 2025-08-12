@@ -1,4 +1,7 @@
-﻿using Microsoft.Office.Interop.Excel;
+﻿using Autodesk.AutoCAD.DatabaseServices;
+using Autodesk.AutoCAD.EditorInput;
+using Autodesk.AutoCAD.Geometry;
+using Microsoft.Office.Interop.Excel;
 //using Microsoft.Office.Tools;
 using System;
 using System.Collections.Generic;
@@ -1107,6 +1110,31 @@ namespace FidoAutoCad
             return writeRange;
         }
 
+        public static Range WriteObjectToExcelRange(Application excelApp, Range startRange, int rowOff, int colOff, bool warning, double[,] writeObject)
+        {
+            // Quick copy and paste, come back to refractor with method above^
+            int numRow = writeObject.GetLength(0);
+            int numCol = writeObject.GetLength(1);
+
+            if (startRange == null) { startRange = excelApp.ActiveCell; }
+            Worksheet workSheet = startRange.Worksheet;
+            Range writeRange = null;
+            try
+            {
+                excelApp.ScreenUpdating = false;
+                Range startCell = startRange.Cells[1, 1];
+                startCell = startCell.Offset[rowOff, colOff];
+                Range endCell = startCell.Offset[numRow - 1, numCol - 1];
+                writeRange = workSheet.Range[startCell, endCell];
+                writeRange.Value2 = writeObject;
+            }
+            finally
+            {
+                excelApp.ScreenUpdating = true;
+            }
+            return writeRange;
+        }
+
         public static void ClearRangeForPrintingObject(Range startRange, int rowOff, int colOff, object[,] writeObject)
         {
 
@@ -1128,6 +1156,7 @@ namespace FidoAutoCad
         }
         #endregion
 
+        #region Worksheet
         public static Worksheet CopyNewSheetAtBack(Worksheet refSheet, string newName = "", bool deleteExisting = false)
         {
             Workbook thisWorkbook = refSheet.Parent;
@@ -1150,13 +1179,13 @@ namespace FidoAutoCad
                             {
                                 refSheet.Application.DisplayAlerts = true;
                             }
-                            
+
                         }
                         else
                         {
                             throw new Exception($"Worksheet already exist.\nWorksheet Name:{newName}");
                         }
-                        
+
                     }
                 }
             }
@@ -1187,21 +1216,29 @@ namespace FidoAutoCad
                 throw new Exception($"Unable to rename worksheet {newSheet} to worksheet with new name {newName}\n\n" + ex.Message);
             }
         }
+        #endregion
 
+        #region Array Functions
         public static string[] ConcatArrays(List<Array> ArraysToWrite)
         {
-            List<string> listToWrinte = new List<string>();
+            // Turns list of array into a single array (append)
+            List<string> listToWrite = new List<string>();
             foreach (Array array in ArraysToWrite)
             {
                 foreach (object obj in array)
                 {
-                    if (obj == null) { listToWrinte.Add(null); }
-                    else { listToWrinte.Add(obj.ToString()); }
+                    if (obj == null) { listToWrite.Add(null); }
+                    else { listToWrite.Add(obj.ToString()); }
 
                 }
             }
-            return listToWrinte.ToArray();
+            return listToWrite.ToArray();
         }
+
+
+
+        #endregion
+
 
         #region Get Excel Workbook
         public static Workbook OpenAndGetWorkbook(Application app, string path)
@@ -1575,14 +1612,281 @@ namespace FidoAutoCad
             // if n < 1, round to appropriate decimal places to avoid floating point artifact
             if (n < 1)
             {
-                int decimals = (int)Math.Ceiling(-Math.Log10(n));
+                int decimals = (int)Math.Ceiling(-Math.Log10(n)) + 1;
                 rounded = Math.Round(rounded, decimals);
             }
             return rounded;
         }
+        public enum RoundingMode
+        {
+            Nearest,
+            Up,
+            Down
+        }
+
+        public static void ReplaceNaN(ref object[,] obj, string replaceValue = "NaN")
+        {
+            for (int rowNum = 0; rowNum < obj.GetLength(0); rowNum++)
+            {
+                for (int colNum = 0; colNum < obj.GetLength(1); colNum++)
+                {
+                    if (obj[rowNum, colNum] is double value && double.IsNaN(value))
+                    {
+                        obj[rowNum, colNum] = replaceValue;
+                    }
+                }
+            }
+        }
+        #endregion
+
+        #region Rounding
+        public static double RoundDouble(double value, double n, RoundingMode mode = RoundingMode.Nearest)
+        {
+            if (n == 0) return value; // avoid divide by zero
+
+            double rounded;
+
+            switch (mode)
+            {
+                case RoundingMode.Nearest:
+                    rounded = Math.Round(value / n) * n;
+                    break;
+
+                case RoundingMode.Up:
+                    rounded = Math.Ceiling(value / n) * n;
+                    break;
+
+                case RoundingMode.Down:
+                    rounded = Math.Floor(value / n) * n;
+                    break;
+
+                default:
+                    throw new ArgumentOutOfRangeException(nameof(mode), "Unsupported rounding mode.");
+            }
+
+            // If n < 1, round to appropriate decimal places to avoid floating point artifact
+            if (n < 1)
+            {
+                int decimals = (int)Math.Ceiling(-Math.Log10(n)) + 1;
+                rounded = Math.Round(rounded, decimals);
+            }
+
+            return rounded;
+        }
+
         #endregion
     }
 
+    static class TwoDArrayFunctions
+    {
+        public enum OutputArrayType
+        {
+            Object,
+            Double,
+            String
+        }
+        public static (int totalRows, int totalCols) GetSizeOfConcat(List<object[,]> arrays)
+        {
+            // Get size of array if each array is just appended to the end
+            // Total No. rows = sum (numRow)
+            // Total No. cols = max (numCol)
+
+            int totalRows = 0;
+            int totalCols = 0;
+            foreach (object[,] array in arrays)
+            {
+                totalRows += array.GetLength(0);
+                if (totalCols < array.GetLength(1)) { totalCols = array.GetLength(1); }
+            }
+
+            return (totalRows, totalCols);
+        }
+
+        public static (int totalRows, int totalCols) GetSizeOfConcat(List<string[,]> arrays)
+        {
+            // Get size of array if each array is just appended to the end
+            // Total No. rows = sum (numRow)
+            // Total No. cols = max (numCol)
+
+            int totalRows = 0;
+            int totalCols = 0;
+            foreach (string[,] array in arrays)
+            {
+                totalRows += array.GetLength(0);
+                if (totalCols < array.GetLength(1)) { totalCols = array.GetLength(1); }
+            }
+
+            return (totalRows, totalCols);
+        }
+
+        public static (int totalRows, int totalCols) GetSizeOfConcat(List<double[,]> arrays)
+        {
+            // Get size of array if each array is just appended to the end
+            // Total No. rows = sum (numRow)
+            // Total No. cols = max (numCol)
+
+            int totalRows = 0;
+            int totalCols = 0;
+            foreach (double[,] array in arrays)
+            {
+                totalRows += array.GetLength(0);
+                if (totalCols < array.GetLength(1)) { totalCols = array.GetLength(1); }
+            }
+
+            return (totalRows, totalCols);
+        }
+
+        public static Array CreateEmptyArrayOfConcatSize(List<object[,]> arrays, OutputArrayType type, int addRows = 0, int addCols = 0)
+        {
+            // Returns empty array with size of concated array, plus additional rows and columns as required
+            (int totalRows, int totalCols) = GetSizeOfConcat(arrays);
+
+            switch (type)
+            {
+                case OutputArrayType.Double:
+                    return new double[totalRows + addRows, totalCols + addCols];
+                case OutputArrayType.String:
+                    return new string[totalRows + addRows, totalCols + addCols];
+                default:
+                    return new object[totalRows + addRows, totalCols + addCols];
+            }
+        }
+
+        public static Array CreateEmptyArrayOfConcatSize(List<double[,]> arrays, OutputArrayType type, int addRows = 0, int addCols = 0)
+        {
+            // Returns empty array with size of concated array, plus additional rows and columns as required
+            (int totalRows, int totalCols) = GetSizeOfConcat(arrays);
+
+            switch (type)
+            {
+                case OutputArrayType.Double:
+                    return new double[totalRows + addRows, totalCols + addCols];
+                case OutputArrayType.String:
+                    return new string[totalRows + addRows, totalCols + addCols];
+                default:
+                    return new object[totalRows + addRows, totalCols + addCols];
+            }
+        }
+
+        public static Array CreateEmptyArrayOfConcatSize(List<string[,]> arrays, OutputArrayType type, int addRows = 0, int addCols = 0)
+        {
+            // Returns empty array with size of concated array, plus additional rows and columns as required
+            (int totalRows, int totalCols) = GetSizeOfConcat(arrays);
+
+            switch (type)
+            {
+                case OutputArrayType.Double:
+                    return new double[totalRows + addRows, totalCols + addCols];
+                case OutputArrayType.String:
+                    return new string[totalRows + addRows, totalCols + addCols];
+                default:
+                    return new object[totalRows + addRows, totalCols + addCols];
+            }
+        }
+
+        public static double[] GetSingleRow(double[,] array, int rowNum)
+        {
+            int numCol = array.GetLength(1);
+            double[] row = new double[numCol];
+            for (int col = 0; col < numCol; col++)
+            {
+                row[col] = array[rowNum, col];
+            }
+            return row;
+        }
+
+        public static void WriteSingleRow(ref double[,] array, double[] row, int rowNum, bool checkNumCol = true)
+        {
+            int numCol = array.GetLength(1);
+
+            if (checkNumCol)
+            {
+                if (row.Length != numCol)
+                {
+                    throw new ArgumentException("Row length does not match array column count.");
+                }    
+            }
+            else
+            {
+                if (row.Length > numCol)
+                {
+                    throw new ArgumentException("Row length exceeds array column count.");
+                }
+            }
+
+            for (int col = 0; col < numCol; col++)
+            {
+                array[rowNum, col] = row[col];
+            }
+        }
+        public static void WriteArrayIntoArray(ref object[,] destArray, object[,] sourceArray, int insertRowNum, int insertColNum)
+        {
+            int sourceNumRows = sourceArray.GetLength(0);
+            int sourceNumCols = sourceArray.GetLength(1);
+
+            // Bounds check
+            if (insertRowNum + sourceNumRows > destArray.GetLength(0) ||
+                insertColNum + sourceNumCols > destArray.GetLength(1))
+            {
+                throw new ArgumentException("Source array does not fit into destination array at the given position.");
+            }
+
+            // Copy data
+            for (int rowNum = 0; rowNum < sourceNumRows; rowNum++)
+            {
+                for (int colNum = 0; colNum < sourceNumCols; colNum++)
+                {
+                    destArray[insertRowNum + rowNum, insertColNum + colNum] = sourceArray[rowNum, colNum];
+                }
+            }
+        }
+
+        public static void WriteArrayIntoArray(ref double[,] destArray, double[,] sourceArray, int insertRowNum, int insertColNum)
+        {
+            int sourceNumRows = sourceArray.GetLength(0);
+            int sourceNumCols = sourceArray.GetLength(1);
+
+            // Bounds check
+            if (insertRowNum + sourceNumRows > destArray.GetLength(0) ||
+                insertColNum + sourceNumCols > destArray.GetLength(1))
+            {
+                throw new ArgumentException("Source array does not fit into destination array at the given position.");
+            }
+
+            // Copy data
+            for (int rowNum = 0; rowNum < sourceNumRows; rowNum++)
+            {
+                for (int colNum = 0; colNum < sourceNumCols; colNum++)
+                {
+                    destArray[insertRowNum + rowNum, insertColNum + colNum] = sourceArray[rowNum, colNum];
+                }
+            }
+        }
+
+        public static void WriteArrayIntoArray(ref string[,] destArray, string[,] sourceArray, int insertRowNum, int insertColNum)
+        {
+            int sourceNumRows = sourceArray.GetLength(0);
+            int sourceNumCols = sourceArray.GetLength(1);
+
+            // Bounds check
+            if (insertRowNum + sourceNumRows > destArray.GetLength(0) ||
+                insertColNum + sourceNumCols > destArray.GetLength(1))
+            {
+                throw new ArgumentException("Source array does not fit into destination array at the given position.");
+            }
+
+            // Copy data
+            for (int rowNum = 0; rowNum < sourceNumRows; rowNum++)
+            {
+                for (int colNum = 0; colNum < sourceNumCols; colNum++)
+                {
+                    destArray[insertRowNum + rowNum, insertColNum + colNum] = sourceArray[rowNum, colNum];
+                }
+            }
+        }
+    }
+
+    
     class CustomFolderBrowser
     {
         OpenFileDialog dialog = new OpenFileDialog();
