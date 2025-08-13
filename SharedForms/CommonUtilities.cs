@@ -1819,7 +1819,29 @@ namespace FidoAutoCad
                 array[rowNum, col] = row[col];
             }
         }
+        #region WriteArrayIntoArray
         public static void WriteArrayIntoArray(ref object[,] destArray, object[,] sourceArray, int insertRowNum, int insertColNum)
+        {
+            int sourceNumRows = sourceArray.GetLength(0);
+            int sourceNumCols = sourceArray.GetLength(1);
+
+            // Bounds check
+            if (insertRowNum + sourceNumRows > destArray.GetLength(0) ||
+                insertColNum + sourceNumCols > destArray.GetLength(1))
+            {
+                throw new ArgumentException("Source array does not fit into destination array at the given position.");
+            }
+
+            // Copy data
+            for (int rowNum = 0; rowNum < sourceNumRows; rowNum++)
+            {
+                for (int colNum = 0; colNum < sourceNumCols; colNum++)
+                {
+                    destArray[insertRowNum + rowNum, insertColNum + colNum] = sourceArray[rowNum, colNum];
+                }
+            }
+        }
+        public static void WriteArrayIntoArray(ref object[,] destArray, double[,] sourceArray, int insertRowNum, int insertColNum)
         {
             int sourceNumRows = sourceArray.GetLength(0);
             int sourceNumCols = sourceArray.GetLength(1);
@@ -1884,6 +1906,66 @@ namespace FidoAutoCad
                 }
             }
         }
+        #endregion
+
+        #region ConcatArrays
+        public static object[,] ConcatArrays(List<object[,]> arrays)
+        {
+            
+            #region Get Length of Final Array
+            int totalRows = 0;
+            int totalCols = 0;
+            foreach (object[,] array in arrays) 
+            { 
+                totalRows += array.GetLength(0); 
+                if (totalCols < array.GetLength(1)) { totalCols = array.GetLength(1); }
+            }
+            if (totalRows == 0) { throw new Exception("No arrays to concatenate."); }
+            #endregion
+
+            #region Write into Array
+            object[,] finalArray = new object[totalRows, totalCols];
+            int currentRowNum = 0;
+            foreach (object[,] array in arrays)
+            {
+                WriteArrayIntoArray(ref finalArray, array, currentRowNum, 0);
+                currentRowNum += array.GetLength(0);
+            }
+            #endregion
+            return finalArray;
+        }
+        #endregion
+
+        #region Rounding and Scaling Arrays
+        public static void MultiplyArray(double[,] array, double factor)
+        {
+            int rows = array.GetLength(0);
+            int cols = array.GetLength(1);
+
+            for (int r = 0; r < rows; r++)
+            {
+                for (int c = 0; c < cols; c++)
+                {
+                    array[r, c] *= factor;
+                }
+            }
+        }
+
+        public static void RoundArray(double[,] array, double roundFactor)
+        {
+            int rows = array.GetLength(0);
+            int cols = array.GetLength(1);
+
+            for (int r = 0; r < rows; r++)
+            {
+                for (int c = 0; c < cols; c++)
+                {
+                    array[r, c] = CommonUtilities.RoundDouble(array[r, c], roundFactor);
+                }
+            }
+        }
+        #endregion
+
     }
 
     

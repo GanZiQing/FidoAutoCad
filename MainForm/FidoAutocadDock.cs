@@ -1,33 +1,19 @@
 ﻿using Autodesk.AutoCAD.ApplicationServices;
-using Autodesk.AutoCAD.Colors;
 using Autodesk.AutoCAD.DatabaseServices;
 using Autodesk.AutoCAD.EditorInput;
 using Autodesk.AutoCAD.Geometry;
-using Autodesk.AutoCAD.Internal.PropertyInspector;
-using Autodesk.AutoCAD.Runtime;
 using FidoAutoCad.SharedForms;
 using Microsoft.Office.Interop.Excel;
 using System;
 using System.Collections.Generic;
-using System.ComponentModel;
 using System.Data;
-using System.Drawing;
-using System.Drawing.Printing;
 using System.Linq;
-using System.Runtime.InteropServices;
-using System.Security.Cryptography;
-using System.Security.Cryptography.X509Certificates;
-using System.Text;
-using System.Threading.Tasks;
 using System.Windows.Forms;
-using System.Xml.Linq;
+using static FidoAutoCad.AcadSharedFunctions;
 using static FidoAutoCad.CommonUtilities;
-using static System.Windows.Forms.VisualStyles.VisualStyleElement.TextBox;
 using AcadApp = Autodesk.AutoCAD.ApplicationServices.Application;
-using AcadDB = Autodesk.AutoCAD.DatabaseServices;
 using Excel = Microsoft.Office.Interop.Excel;
 using Exception = System.Exception;
-using static FidoAutoCad.AcadSharedFunctions;
 
 namespace FidoAutoCad.Forms
 {
@@ -63,7 +49,7 @@ namespace FidoAutoCad.Forms
             tbAtt = new AttributeTextBox("areaConvOptions_AC", dispAreaConv, true);
             tbAtt.type = "double";
             attributes.Add(tbAtt.attName, tbAtt);
-                        
+
             //label1.Focus(); // Cannot figure out how to not select the combo box upon load lol
         }
         #endregion
@@ -197,7 +183,7 @@ namespace FidoAutoCad.Forms
             optionsForm.AddTracker(ref printProperties.properties);
             optionsForm.ShowDialog();
         }
-        
+
         private (double roundFactor, double distConvFactor, double areaConvFactor) GetConversionFactors()
         {
             double roundFactor = double.NaN;
@@ -232,7 +218,7 @@ namespace FidoAutoCad.Forms
                 #region Autocad Transaction
                 List<double[,]> allCoords = new List<double[,]>();
                 List<string> allTypes = new List<string>();
-                
+
                 (Document acDoc, Editor editor, Database acDb) = GetAcadDoc();
                 using (acDoc.LockDocument())
                 {
@@ -252,8 +238,8 @@ namespace FidoAutoCad.Forms
                             {
                                 dynamic dynEnt = acTrans.GetObject(objId, OpenMode.ForRead) as Entity;
                                 double[,] coord = GetCoordinates(dynEnt);
-                                
-                                if (skipInvalidCheck.Checked && double.IsNaN(coord[0,0]))
+
+                                if (skipInvalidCheck.Checked && double.IsNaN(coord[0, 0]))
                                 {
                                     skippedInvalidCount++;
                                     continue;
@@ -285,7 +271,7 @@ namespace FidoAutoCad.Forms
                 foreach (double[,] coord in allCoords)
                 {
                     // Column 1 - object number and type
-                    printObject[currentRowNum,0] = $"{objectNum + 1}.{allTypes[objectNum]}";
+                    printObject[currentRowNum, 0] = $"{objectNum + 1}.{allTypes[objectNum]}";
                     objectNum += 1;
 
                     for (int coordRowNum = 0; coordRowNum < coord.GetLength(0); coordRowNum++)
@@ -319,7 +305,7 @@ namespace FidoAutoCad.Forms
         #endregion
 
         #region Get Coordinates or Mid Points
-        private void getCoordinatesButt_Click(object sender, EventArgs e)
+        private void getCoordinatesButt_Click2(object sender, EventArgs e)
         {
             try
             {
@@ -370,7 +356,7 @@ namespace FidoAutoCad.Forms
 
                 #region Transform in UCS
                 if (allCoords.Count == 0) { throw new Exception("Nothing found to print"); }
-                if (translateByUcsCheck.Checked) { TransformListOfCoordsByCs(ref allCoords, editor); }
+                if (translateByUcsCheck.Checked) { TransformCoordByCs(ref allCoords, editor); }
                 #endregion
 
                 #region Convert Distances
@@ -456,8 +442,7 @@ namespace FidoAutoCad.Forms
                 #endregion
 
                 #region Get Coordinates in WCS
-                List<double[,]> allCoordsList = new List<double[,]>();
-                List<string> allTypes = new List<string>();
+                List<AcadObject> acadObjects = new List<AcadObject>();
 
                 (Document acDoc, Editor editor, Database acDb) = GetAcadDoc();
                 using (acDoc.LockDocument())
@@ -473,21 +458,24 @@ namespace FidoAutoCad.Forms
                                 editor.WriteMessage("Fido: Operation terminated. " + ex.Message + Environment.NewLine); return;
                             }
 
+                            #region Refractored Version
+                            int objCount = 0;
                             int skippedInvalidCount = 0;
                             foreach (ObjectId objId in selectedObjIds)
                             {
-                                dynamic dynEnt = acTrans.GetObject(objId, OpenMode.ForRead) as Entity;
-                                double[,] coord = GetCoordinates(dynEnt);
+                                AcadObject acadObj = new AcadObject(objId);
+                                double[,] coord = acadObj.GetObjectCoordinatesFromAcad(acTrans);
 
                                 if (skipInvalidCheck.Checked && double.IsNaN(coord[0, 0]))
                                 {
                                     skippedInvalidCount++;
                                     continue;
                                 }
-
-                                allCoordsList.Add(coord);
-                                allTypes.Add(dynEnt.AcadObject.ObjectName);
+                                acadObj.order = objCount;
+                                objCount += 1;
+                                acadObjects.Add(acadObj);
                             }
+                            #endregion
                             editor.WriteMessage($"Fido: {skippedInvalidCount} invalid object(s)." + Environment.NewLine);
                         }
                     }
@@ -495,106 +483,52 @@ namespace FidoAutoCad.Forms
                 }
                 #endregion
 
-                #region Transform in UCS
-                if (allCoordsList.Count == 0) { throw new Exception("Nothing found to print"); }
-                if (translateByUcsCheck.Checked) { TransformListOfCoordsByCs(ref allCoordsList, editor); }
-                #endregion
+                if (acadObjects.Count == 0) { throw new Exception("Nothing found to print"); }
+                int totalPrintRows = 0;
 
-                #region Convert To Mid Points
-                List<double[,]> midPointsList = new List<double[,]>();
-
-                foreach (double[,] coords in allCoordsList)
+                foreach (AcadObject acadObj in acadObjects)
                 {
-                    #region Handle No Mid Points
-                    if (coords.GetLength(0) == 0)
+                    #region Transform in UCS
+                    if (translateByUcsCheck.Checked)
                     {
-                        double[,] emptyMidPoint = new double[1, coords.GetLength(1)];
-                        for (int colNum = 0; colNum < coords.GetLength(1); colNum++)
-                        {
-                            emptyMidPoint[0, colNum] = double.NaN;
-                        }
-                        midPointsList.Add(emptyMidPoint);
-                        continue;
+                        TransformCoordByCs(ref acadObj.coords, editor);
                     }
                     #endregion
 
+                    #region Find Mid Points
+                    acadObj.CalculateMidPoints();
+                    #endregion
 
-                    double[,] midPoints = new double[coords.GetLength(0) - 1, coords.GetLength(1)];
-                    for (int rowNum = 0; rowNum < coords.GetLength(0) - 1; rowNum++)
+                    #region Convert Distances
+                    if (!double.IsNaN(distConvFactor))
                     {
-                        double[] point1 = TwoDArrayFunctions.GetSingleRow(coords, rowNum);
-                        double[] point2 = TwoDArrayFunctions.GetSingleRow(coords, rowNum + 1);
-                        double[] midPoint = findMidPoint(point1, point2);
-
-                        TwoDArrayFunctions.WriteSingleRow(ref midPoints, midPoint, rowNum);
+                        acadObj.ConvertMidPoints(distConvFactor);
                     }
-                    midPointsList.Add(midPoints);
-                }
-                #endregion
+                    #endregion
 
-                #region Convert Distances
-                if (!double.IsNaN(distConvFactor))
-                {
-                    foreach (double[,] coord in midPointsList)
+                    #region Round Values
+                    if (!double.IsNaN(roundFactor))
                     {
-                        for (int coordRowNum = 0; coordRowNum < coord.GetLength(0); coordRowNum++)
-                        {
-                            for (int coordColNum = 0; coordColNum < coord.GetLength(1); coordColNum++)
-                            {
-                                coord[coordRowNum, coordColNum] = coord[coordRowNum, coordColNum] * distConvFactor;
-                            }
-                        }
+                        acadObj.RoundMidPoints(roundFactor);
                     }
+                    #endregion
+
+                    #region Get Number of Rows
+                    totalPrintRows += acadObj.midPoints.GetLength(0);
+                    #endregion
                 }
-                #endregion
 
-                #region Round Values
-                if (!double.IsNaN(roundFactor))
-                {
-                    foreach (double[,] coord in midPointsList)
-                    {
-                        for (int coordRowNum = 0; coordRowNum < coord.GetLength(0); coordRowNum++)
-                        {
-                            for (int coordColNum = 0; coordColNum < coord.GetLength(1); coordColNum++)
-                            {
-                                coord[coordRowNum, coordColNum] = RoundDouble(coord[coordRowNum, coordColNum], roundFactor);
-                            }
-                        }
-                    }
-                }
-                #endregion
-
-                #region Form print object
-                // Get number of rows
-                (int totalRows, _) = TwoDArrayFunctions.GetSizeOfConcat(allCoordsList);
-                object[,] printObject = new object[totalRows, 5];
-
-                int currentRowNum = 0;
+                #region Form Print Object
                 int objectNum = 0;
-
-                foreach (double[,] coord in midPointsList)
+                List<object[,]> printArrays = new List<object[,]>();
+                foreach (AcadObject acadObj in acadObjects)
                 {
                     // Column 1 - object number and type
-                    printObject[currentRowNum, 0] = $"{objectNum + 1}.{allTypes[objectNum]}";
+                    object[,] printArray = acadObj.CreateMidPointPrintObj();
+                    printArrays.Add(printArray);
                     objectNum += 1;
-
-                    for (int coordRowNum = 0; coordRowNum < coord.GetLength(0); coordRowNum++)
-                    {
-                        // Column 2 - number
-                        printObject[currentRowNum, 1] = coordRowNum + 1;
-
-                        // Column 3 to 5 - coordinates
-                        printObject[currentRowNum, 2] = coord[coordRowNum, 0];
-                        printObject[currentRowNum, 3] = coord[coordRowNum, 1];
-                        if (coord.GetLength(1) > 2)
-                        {
-                            printObject[currentRowNum, 4] = coord[coordRowNum, 2];
-                        }
-                        currentRowNum += 1;
-                    }
                 }
-
-                ReplaceNaN(ref printObject);
+                object[,] printObject = TwoDArrayFunctions.ConcatArrays(printArrays);
                 #endregion
 
                 #region Write to Excel
@@ -605,6 +539,111 @@ namespace FidoAutoCad.Forms
             }
             catch (Exception ex) { MessageBox.Show(ex.Message, "Error"); }
         }
+
+        private void getCoordinatesButt_Click(object sender, EventArgs e)
+        {
+            try
+            {
+                #region Checks
+                CheckIfExcelIsAttached();
+                (double roundFactor, double distConvFactor, double areaConvFactor) = GetConversionFactors();
+                #endregion
+
+                #region Get Coordinates in WCS
+                List<AcadObject> acadObjects = new List<AcadObject>();
+
+                (Document acDoc, Editor editor, Database acDb) = GetAcadDoc();
+                using (acDoc.LockDocument())
+                {
+                    try
+                    {
+                        using (Transaction acTrans = acDb.TransactionManager.StartTransaction())
+                        {
+                            ObjectId[] selectedObjIds = null;
+                            try { selectedObjIds = GetAcadSelectedObjectID(acTrans, editor, skipLockCheck.Checked); }
+                            catch (Exception ex)
+                            {
+                                editor.WriteMessage("Fido: Operation terminated. " + ex.Message + Environment.NewLine); return;
+                            }
+
+                            #region Refractored Version
+                            int objCount = 0;
+                            int skippedInvalidCount = 0;
+                            foreach (ObjectId objId in selectedObjIds)
+                            {
+                                AcadObject acadObj = new AcadObject(objId);
+                                double[,] coord = acadObj.GetObjectCoordinatesFromAcad(acTrans);
+
+                                if (skipInvalidCheck.Checked && double.IsNaN(coord[0, 0]))
+                                {
+                                    skippedInvalidCount++;
+                                    continue;
+                                }
+                                acadObj.order = objCount;
+                                objCount += 1;
+                                acadObjects.Add(acadObj);
+                            }
+                            #endregion
+                            editor.WriteMessage($"Fido: {skippedInvalidCount} invalid object(s)." + Environment.NewLine);
+                        }
+                    }
+                    catch (Exception ex) { throw new Exception("Error in autocad transaction" + ex.Message); }
+                }
+                #endregion
+
+                if (acadObjects.Count == 0) { throw new Exception("Nothing found to print"); }
+                int totalPrintRows = 0;
+
+                foreach (AcadObject acadObj in acadObjects)
+                {
+                    #region Transform in UCS
+                    if (translateByUcsCheck.Checked)
+                    {
+                        TransformCoordByCs(ref acadObj.coords, editor);
+                    }
+                    #endregion
+
+                    #region Convert Distances
+                    if (!double.IsNaN(distConvFactor))
+                    {
+                        acadObj.ConvertCoordinates(distConvFactor);
+                    }
+                    #endregion
+
+                    #region Round Values
+                    if (!double.IsNaN(roundFactor))
+                    {
+                        acadObj.RoundCoordinates(roundFactor);
+                    }
+                    #endregion
+
+                    #region Get Number of Rows
+                    totalPrintRows += acadObj.coords.GetLength(0);
+                    #endregion
+                }
+
+                #region Form Print Object
+                int objectNum = 0;
+                List<object[,]> printArrays = new List<object[,]>();
+                foreach (AcadObject acadObj in acadObjects)
+                {
+                    // Column 1 - object number and type
+                    object[,] printArray = acadObj.CreateCoordPrinttObj();
+                    printArrays.Add(printArray);
+                    objectNum += 1;
+                }
+                object[,] printObject = TwoDArrayFunctions.ConcatArrays(printArrays);
+                #endregion
+
+                #region Write to Excel
+                editor.WriteMessage($"Fido: Begin write to excel." + Environment.NewLine);
+                WriteObjectToExcelRange(excelApp, null, 0, 0, true, printObject);
+                editor.WriteMessage($"Fido: Coordinates written to excel. Operation completed." + Environment.NewLine);
+                #endregion
+            }
+            catch (Exception ex) { MessageBox.Show(ex.Message, "Error"); }
+        }
+
         #endregion
 
         #region ACAD Shared Outdated
@@ -688,7 +727,7 @@ namespace FidoAutoCad.Forms
         //private ObjectId[] GetAcadSelectedObjectID(Transaction acTrans, Editor editor, bool skipLockedObj = false)
         //{
         //    SelectionSet selectedObjs = GetAcadSelectionSet(editor);
-            
+
         //    List<ObjectId> listofObjectId = new List<ObjectId>();
         //    int skippedObj = 0;
         //    foreach (SelectedObject selObj in selectedObjs)
@@ -703,7 +742,7 @@ namespace FidoAutoCad.Forms
         //        }
         //        listofObjectId.Add(selObj.ObjectId);
         //    }
-            
+
         //    if (skippedObj > 0)
         //    {
         //        editor.WriteMessage($"Fido: {skippedObj} object(s) on locked layer(s) skipped." + Environment.NewLine);
@@ -764,7 +803,7 @@ namespace FidoAutoCad.Forms
         //    {
         //        transfMatrix = editor.CurrentUserCoordinateSystem;
         //    }
-                
+
         //    foreach (double[,] coords in ogCoords)
         //    {
         //        double[,] newCoord = new double[coords.GetLength(0), coords.GetLength(1)];
@@ -804,8 +843,6 @@ namespace FidoAutoCad.Forms
         //    return midPoint;
         //}
         #endregion
-
-
     }
     #region Property Classes
     public class PrintProperties
@@ -889,7 +926,8 @@ namespace FidoAutoCad.Forms
             foreach (string propertyName in properties.Keys)
             {
                 AcadPropertyType property = (AcadPropertyType)properties[propertyName];
-                if (property.isActive) { 
+                if (property.isActive)
+                {
                     property.ConvertAndRoundContent(roundFactor, distConvFactor, areaConvFactor);
                 }
             }
@@ -908,9 +946,9 @@ namespace FidoAutoCad.Forms
         public void ConvertAndRoundContent(double roundFactor, double distConvFactor, double areaConvFactor)
         {
             if (name == "Type") { return; }
-            
+
             #region Convert Values
-            if (name == "Length") 
+            if (name == "Length")
             {
                 if (!double.IsNaN(distConvFactor))
                 {
@@ -928,7 +966,7 @@ namespace FidoAutoCad.Forms
             }
             else if (name == "Area")
             {
-                if (!double.IsNaN(areaConvFactor)) 
+                if (!double.IsNaN(areaConvFactor))
                 {
                     for (int i = 0; i < contentArray.Length; i++)
                     {
@@ -955,7 +993,9 @@ namespace FidoAutoCad.Forms
             #endregion
         }
     }
+    #endregion
 
+    #region Acad Object
     public class AcadObject
     {
         // Represents an AutoCAD object type
@@ -964,15 +1004,7 @@ namespace FidoAutoCad.Forms
         public string name { get; set; }
         public int order { get; set; }
         public ObjectId objectId { get; set; }
-        public ObjectType objectType { get; set; }
-        public enum ObjectType
-        {
-            Line,
-            Polyline,
-            Polyline2d,
-            Polyline3d,
-            Circle
-        }
+
 
         public AcadObject(string name, int order, ObjectId objectId)
         {
@@ -980,126 +1012,181 @@ namespace FidoAutoCad.Forms
             this.order = order;
             this.objectId = objectId;
         }
+
+        public AcadObject(ObjectId objectId)
+        {
+            this.objectId = objectId;
+        }
         #endregion
 
-
-
-        #region Coordinates
-        double[,] coord;
-        public double[,] GetObjectCoordinates(Transaction acTrans)
+        #region Coordinates and Object Type
+        public double[,] coords;
+        public bool isClosed;
+        public double[,] GetObjectCoordinatesFromAcad(Transaction acTrans)
         {
             dynamic dynEnt = acTrans.GetObject(objectId, OpenMode.ForRead) as Entity;
-            string type = dynEnt.AcadObject.ObjectName;
-            SetObjectType(type);
-            coord = GetCoordinates(dynEnt);
-            return coord;
-        }
-
-        public void SetObjectType(string typeString)
-        {
-            switch (typeString)
+            type = dynEnt.AcadObject.ObjectName;
+            //SetObjectType(type);
+            coords = GetCoordinates(dynEnt);
+            try
             {
-                case "Line":
-                    this.objectType = ObjectType.Line;
-                    break;
-                case "Polyline":
-                    this.objectType = ObjectType.Polyline;
-                    break;
-                case "Polyline2d":
-                    this.objectType = ObjectType.Polyline2d;
-                    break;
-                case "Polyline3d":
-                    this.objectType = ObjectType.Polyline3d;
-                    break;
-                case "Circle":
-                    this.objectType = ObjectType.Circle;
-                    break;
-                default:
-                    throw new Exception($"Unknown object type: {typeString}");
+                isClosed = dynEnt.AcadObject.Closed;
             }
+            catch { isClosed = false; }
+
+            return coords;
         }
         #endregion
 
+        #region Type
+        //public ObjectType objectType { get; set; }
+        //public enum ObjectType
+        //{
+        //    Line,
+        //    Polyline,
+        //    Polyline2d,
+        //    Polyline3d,
+        //    Circle,
+        //    Others
+        //}
+        string type;
+        //public void SetObjectType(string typeString)
+        //{
+        //    switch (typeString)
+        //    {
+        //        // these are wrong and need to be fixed
+        //        case "AcDbLine":
+        //            this.objectType = ObjectType.Line;
+        //            break;
+        //        case "AcDbPolyline":
+        //            this.objectType = ObjectType.Polyline;
+        //            break;
+        //        case "AcDbPolyline2d":
+        //            this.objectType = ObjectType.Polyline2d;
+        //            break;
+        //        case "AcDb3dPolyline":
+        //            this.objectType = ObjectType.Polyline3d;
+        //            break;
+        //        case "AcDbCircle":
+        //            this.objectType = ObjectType.Circle;
+        //            break;
+        //        default:
+        //            throw new Exception($"Unknown object type: {typeString}");
+        //    }
+        //}
 
-        public void test()
+        public string GetObjectTypeFromAcad(Transaction acTrans)
         {
-            //dynamic dynEnt = acTrans.GetObject(objId, OpenMode.ForRead) as Entity;
-            //double[,] coord = GetCoordinates(dynEnt);
+            dynamic dynEnt = acTrans.GetObject(objectId, OpenMode.ForRead) as Entity;
+            type = dynEnt.AcadObject.ObjectName;
+            //SetObjectType(type);
+            return type;
+        }
+        #endregion
 
-            //if (skipInvalidCheck.Checked && double.IsNaN(coord[0, 0]))
+        #region Mid Point
+        public double[,] midPoints;
+        public double[,] CalculateMidPoints()
+        {
+            #region Checks
+            if (coords == null) { throw new Exception("No coordinates provided"); }
+
+            if (coords.GetLength(0) < 2)
+            {
+                midPoints = new double[1, coords.GetLength(1)];
+                for (int colNum = 0; colNum < coords.GetLength(1); colNum++)
+                {
+                    midPoints[0, colNum] = double.NaN;
+                }
+                return midPoints;
+            }
+            #endregion
+
+            #region Calculate Size
+            if (isClosed) { midPoints = new double[coords.GetLength(0), coords.GetLength(1)]; }
+            else { midPoints = new double[coords.GetLength(0) - 1, coords.GetLength(1)]; }
+            #endregion
+
+            #region Calculate Mid Points
+            for (int rowNum = 0; rowNum < coords.GetLength(0) - 1; rowNum++)
+            {
+                double[] point1 = TwoDArrayFunctions.GetSingleRow(coords, rowNum);
+                double[] point2 = TwoDArrayFunctions.GetSingleRow(coords, rowNum + 1);
+                double[] midPoint = findMidPoint(point1, point2);
+
+                TwoDArrayFunctions.WriteSingleRow(ref midPoints, midPoint, rowNum);
+            }
+
+            // Add last point if closed
+            if (isClosed)
+            {
+                double[] point1 = TwoDArrayFunctions.GetSingleRow(coords, coords.GetLength(0) - 1);
+                double[] point2 = TwoDArrayFunctions.GetSingleRow(coords, 0);
+                double[] midPoint = findMidPoint(point1, point2);
+
+                TwoDArrayFunctions.WriteSingleRow(ref midPoints, midPoint, coords.GetLength(0) - 1);
+            }
+            #endregion
+            return midPoints;
+        }
+
+        public object[,] CreateMidPointPrintObj()
+        {
+            return CreatePrintObj(midPoints);
+            //if (midPoints == null) { throw new Exception("No mid points calculated"); } 
+            //object[,] printObject = new object[midPoints.GetLength(0), 5];
+
+            //printObject[0, 0] = $"{order}.{type}";
+
+            //for (int coordRowNum = 0; coordRowNum < midPoints.GetLength(0); coordRowNum++)
             //{
-            //    skippedInvalidCount++;
-            //    continue;
+            //    // Column 2 - numbers
+            //    printObject[coordRowNum, 1] = coordRowNum + 1;
             //}
 
-            //allCoords.Add(coord);
-            //allTypes.Add(dynEnt.AcadObject.ObjectName);
+            //// Column 3 to 5 - coordinates
+            //TwoDArrayFunctions.WriteArrayIntoArray(ref printObject, midPoints, 0, 2);
+            //return printObject;
         }
-
-        private double[,] GetCoordinates(dynamic dynEnt)
+        public object[,] CreateCoordPrinttObj()
         {
-            double[,] formattedObject;
-            #region Get Coordinates
-            double[] coord;
-            bool is3D = true;
-            switch (dynEnt)
-            {
-                case Autodesk.AutoCAD.DatabaseServices.Line line:
-                    // handle Line
-                    coord = new double[6];
-                    coord[0] = line.StartPoint.X;
-                    coord[1] = line.StartPoint.Y;
-                    coord[2] = line.StartPoint.Z;
-                    coord[3] = line.EndPoint.X;
-                    coord[4] = line.EndPoint.Y;
-                    coord[5] = line.EndPoint.Z;
-                    break;
-                case Polyline poly:
-                    is3D = false;
-                    coord = dynEnt.AcadObject.Coordinates;
-                    break;
-                case Polyline2d poly2d:
-                    is3D = false;
-                    coord = dynEnt.AcadObject.Coordinates;
-                    break;
-                case Polyline3d poly3d:
-                    coord = dynEnt.AcadObject.Coordinates;
-                    break;
-                case Circle circle:
-                    coord = dynEnt.AcadObject.Center;
-                    break;
-                default:
-                    is3D = false;
-                    coord = new double[] { double.NaN, double.NaN };
-                    break;
-                    //throw new Exception($"AutoCAD object type {dynEnt.AcadObject.ObjectName} does not support this function");
-            }
-            #endregion
-
-            #region Format Coordinates
-            if (is3D)
-            {
-                formattedObject = new double[coord.Length / 3, 3];
-                for (int rowNum = 0; rowNum < formattedObject.GetLength(0); rowNum++)
-                {
-                    formattedObject[rowNum, 0] = coord[rowNum * 3];
-                    formattedObject[rowNum, 1] = coord[rowNum * 3 + 1];
-                    formattedObject[rowNum, 2] = coord[rowNum * 3 + 2];
-                }
-            }
-            else
-            {
-                formattedObject = new double[coord.Length / 2, 2];
-                for (int rowNum = 0; rowNum < formattedObject.GetLength(0); rowNum++)
-                {
-                    formattedObject[rowNum, 0] = coord[rowNum * 2];
-                    formattedObject[rowNum, 1] = coord[rowNum * 2 + 1];
-                }
-            }
-            #endregion
-
-            return formattedObject;
+            return CreatePrintObj(coords);
         }
+        public object[,] CreatePrintObj(double[,] sourceObject)
+        {
+
+            if (sourceObject == null) { throw new Exception("No mid points calculated"); }
+            object[,] printObject = new object[sourceObject.GetLength(0), 5];
+
+            printObject[0, 0] = $"{order}.{type}";
+
+            for (int coordRowNum = 0; coordRowNum < sourceObject.GetLength(0); coordRowNum++)
+            {
+                // Column 2 - numbers
+                printObject[coordRowNum, 1] = coordRowNum + 1;
+            }
+
+            // Column 3 to 5 - coordinates
+            TwoDArrayFunctions.WriteArrayIntoArray(ref printObject, sourceObject, 0, 2);
+            ReplaceNaN(ref printObject);
+            return printObject;
+        }
+        #endregion
+
+        #region Rounding and Conversion
+        public void ConvertCoordinates(double distConvFactor)
+            => TwoDArrayFunctions.MultiplyArray(coords, distConvFactor);
+
+        public void ConvertMidPoints(double distConvFactor)
+            => TwoDArrayFunctions.MultiplyArray(midPoints, distConvFactor);
+
+        public void RoundCoordinates(double roundFactor)
+            => TwoDArrayFunctions.RoundArray(coords, roundFactor);
+
+        public void RoundMidPoints(double roundFactor)
+            => TwoDArrayFunctions.RoundArray(midPoints, roundFactor);
+
+        #endregion
     }
     #endregion
 }
@@ -1237,7 +1324,7 @@ namespace FidoAutoCad
             return newCoord;
         }
 
-        public static double[] TranformPointByCs(double[] ogCoord, Editor editor, bool wcsToUcs = true)
+        public static double[] TranformPointByCs(ref double[] ogCoord, Editor editor, bool wcsToUcs = true)
         {
             Matrix3d transfMatrix;
             if (wcsToUcs)
@@ -1252,7 +1339,7 @@ namespace FidoAutoCad
             return newCoord;
         }
 
-        public static void TransformListOfCoordsByCs(ref List<double[,]> ogCoords, Editor editor, bool wcsToUcs = true)
+        public static void TransformCoordByCs(ref List<double[,]> ogCoords, Editor editor, bool wcsToUcs = true)
         {
             List<double[,]> newCoords = new List<double[,]>();
 
@@ -1291,6 +1378,43 @@ namespace FidoAutoCad
                 }
                 newCoords.Add(newCoord);
             }
+            ogCoords = newCoords;
+        }
+
+        public static void TransformCoordByCs(ref double[,] ogCoords, Editor editor, bool wcsToUcs = true)
+        {
+            Matrix3d transfMatrix;
+            if (wcsToUcs)
+            {
+                transfMatrix = editor.CurrentUserCoordinateSystem.Inverse();
+            }
+            else
+            {
+                transfMatrix = editor.CurrentUserCoordinateSystem;
+            }
+
+            double[,] newCoords = new double[ogCoords.GetLength(0), ogCoords.GetLength(1)];
+            for (int rowNum = 0; rowNum < ogCoords.GetLength(0); rowNum++)
+            {
+                Point3d oldPoint;
+                if (ogCoords.GetLength(1) == 3)
+                {
+                    oldPoint = new Point3d(ogCoords[rowNum, 0], ogCoords[rowNum, 1], ogCoords[rowNum, 2]);
+                }
+                else
+                {
+                    oldPoint = new Point3d(ogCoords[rowNum, 0], ogCoords[rowNum, 1], 0);
+                }
+
+                Point3d ucsPoint = oldPoint.TransformBy(transfMatrix);
+                newCoords[rowNum, 0] = ucsPoint.X;
+                newCoords[rowNum, 1] = ucsPoint.Y;
+                if (ogCoords.GetLength(1) == 3)
+                {
+                    newCoords[rowNum, 2] = ucsPoint.Z;
+                }
+            }
+
             ogCoords = newCoords;
         }
 

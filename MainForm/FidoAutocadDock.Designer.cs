@@ -32,12 +32,12 @@
         private void InitializeComponent()
         {
             this.tabPage1 = new System.Windows.Forms.TabPage();
+            this.label4 = new System.Windows.Forms.Label();
             this.groupBox3 = new System.Windows.Forms.GroupBox();
             this.printStartCheck = new System.Windows.Forms.CheckBox();
             this.checkBox1 = new System.Windows.Forms.CheckBox();
             this.checkBox2 = new System.Windows.Forms.CheckBox();
             this.Settings = new System.Windows.Forms.GroupBox();
-            this.label4 = new System.Windows.Forms.Label();
             this.roundTypeComboBox = new System.Windows.Forms.ComboBox();
             this.translateByUcsCheck = new System.Windows.Forms.CheckBox();
             this.label1 = new System.Windows.Forms.Label();
@@ -59,6 +59,7 @@
             this.attachRunningExcel = new System.Windows.Forms.Button();
             this.detachExcel = new System.Windows.Forms.Button();
             this.tabControl1 = new System.Windows.Forms.TabControl();
+            this.button1 = new System.Windows.Forms.Button();
             this.tabPage1.SuspendLayout();
             this.groupBox3.SuspendLayout();
             this.Settings.SuspendLayout();
@@ -71,6 +72,7 @@
             // 
             this.tabPage1.AutoScroll = true;
             this.tabPage1.BackColor = System.Drawing.SystemColors.Control;
+            this.tabPage1.Controls.Add(this.label4);
             this.tabPage1.Controls.Add(this.groupBox3);
             this.tabPage1.Controls.Add(this.Settings);
             this.tabPage1.Controls.Add(this.groupBox2);
@@ -82,6 +84,17 @@
             this.tabPage1.Size = new System.Drawing.Size(531, 1057);
             this.tabPage1.TabIndex = 0;
             this.tabPage1.Text = "Excel";
+            // 
+            // label4
+            // 
+            this.label4.Location = new System.Drawing.Point(123, 649);
+            this.label4.Margin = new System.Windows.Forms.Padding(4);
+            this.label4.Name = "label4";
+            this.label4.Size = new System.Drawing.Size(356, 132);
+            this.label4.TabIndex = 61;
+            this.label4.Text = "Rounding to ceiling and floor not implemented, Mid way through refractoring print" +
+    " coordinates and mid points";
+            this.label4.TextAlign = System.Drawing.ContentAlignment.MiddleLeft;
             // 
             // groupBox3
             // 
@@ -102,7 +115,7 @@
             this.printStartCheck.Location = new System.Drawing.Point(11, 29);
             this.printStartCheck.Margin = new System.Windows.Forms.Padding(4);
             this.printStartCheck.Name = "printStartCheck";
-            this.printStartCheck.Size = new System.Drawing.Size(152, 28);
+            this.printStartCheck.Size = new System.Drawing.Size(158, 29);
             this.printStartCheck.TabIndex = 46;
             this.printStartCheck.Text = "Write to Excel";
             this.printStartCheck.UseVisualStyleBackColor = true;
@@ -114,7 +127,7 @@
             this.checkBox1.Location = new System.Drawing.Point(11, 66);
             this.checkBox1.Margin = new System.Windows.Forms.Padding(4);
             this.checkBox1.Name = "checkBox1";
-            this.checkBox1.Size = new System.Drawing.Size(183, 28);
+            this.checkBox1.Size = new System.Drawing.Size(190, 29);
             this.checkBox1.TabIndex = 47;
             this.checkBox1.Text = "Copy to clipboard";
             this.checkBox1.UseVisualStyleBackColor = true;
@@ -126,14 +139,14 @@
             this.checkBox2.Location = new System.Drawing.Point(11, 103);
             this.checkBox2.Margin = new System.Windows.Forms.Padding(4);
             this.checkBox2.Name = "checkBox2";
-            this.checkBox2.Size = new System.Drawing.Size(163, 28);
+            this.checkBox2.Size = new System.Drawing.Size(170, 29);
             this.checkBox2.TabIndex = 48;
             this.checkBox2.Text = "Show Msg Box";
             this.checkBox2.UseVisualStyleBackColor = true;
             // 
             // Settings
             // 
-            this.Settings.Controls.Add(this.label4);
+            this.Settings.Controls.Add(this.button1);
             this.Settings.Controls.Add(this.roundTypeComboBox);
             this.Settings.Controls.Add(this.translateByUcsCheck);
             this.Settings.Controls.Add(this.label1);
@@ -150,16 +163,6 @@
             this.Settings.TabIndex = 14;
             this.Settings.TabStop = false;
             this.Settings.Text = "Settings";
-            // 
-            // label4
-            // 
-            this.label4.Location = new System.Drawing.Point(313, 178);
-            this.label4.Margin = new System.Windows.Forms.Padding(4);
-            this.label4.Name = "label4";
-            this.label4.Size = new System.Drawing.Size(169, 99);
-            this.label4.TabIndex = 61;
-            this.label4.Text = "Conversion other than nearest not implemented";
-            this.label4.TextAlign = System.Drawing.ContentAlignment.MiddleLeft;
             // 
             // roundTypeComboBox
             // 
@@ -182,7 +185,7 @@
             this.translateByUcsCheck.Location = new System.Drawing.Point(17, 248);
             this.translateByUcsCheck.Margin = new System.Windows.Forms.Padding(4);
             this.translateByUcsCheck.Name = "translateByUcsCheck";
-            this.translateByUcsCheck.Size = new System.Drawing.Size(181, 28);
+            this.translateByUcsCheck.Size = new System.Drawing.Size(194, 29);
             this.translateByUcsCheck.TabIndex = 59;
             this.translateByUcsCheck.Text = "Translate by UCS";
             this.translateByUcsCheck.UseVisualStyleBackColor = true;
@@ -206,7 +209,7 @@
             this.skipInvalidCheck.Location = new System.Drawing.Point(17, 209);
             this.skipInvalidCheck.Margin = new System.Windows.Forms.Padding(4);
             this.skipInvalidCheck.Name = "skipInvalidCheck";
-            this.skipInvalidCheck.Size = new System.Drawing.Size(199, 28);
+            this.skipInvalidCheck.Size = new System.Drawing.Size(210, 29);
             this.skipInvalidCheck.TabIndex = 57;
             this.skipInvalidCheck.Text = "Skip Invalid Objects";
             this.skipInvalidCheck.UseVisualStyleBackColor = true;
@@ -230,7 +233,7 @@
             this.skipLockCheck.Location = new System.Drawing.Point(17, 170);
             this.skipLockCheck.Margin = new System.Windows.Forms.Padding(4);
             this.skipLockCheck.Name = "skipLockCheck";
-            this.skipLockCheck.Size = new System.Drawing.Size(295, 28);
+            this.skipLockCheck.Size = new System.Drawing.Size(309, 29);
             this.skipLockCheck.TabIndex = 56;
             this.skipLockCheck.Text = "Skip Objects on Locked Layers";
             this.skipLockCheck.UseVisualStyleBackColor = true;
@@ -413,6 +416,17 @@
             this.tabControl1.Size = new System.Drawing.Size(539, 1094);
             this.tabControl1.TabIndex = 13;
             // 
+            // button1
+            // 
+            this.button1.Location = new System.Drawing.Point(261, 221);
+            this.button1.Margin = new System.Windows.Forms.Padding(4);
+            this.button1.Name = "button1";
+            this.button1.Size = new System.Drawing.Size(238, 39);
+            this.button1.TabIndex = 61;
+            this.button1.Text = "Get Coordinates";
+            this.button1.UseVisualStyleBackColor = true;
+            this.button1.Click += new System.EventHandler(this.getCoordinatesButt_Click2);
+            // 
             // FidoAutocadDock
             // 
             this.AutoScaleDimensions = new System.Drawing.SizeF(11F, 24F);
@@ -463,5 +477,6 @@
         private System.Windows.Forms.ComboBox roundTypeComboBox;
         private System.Windows.Forms.Label label4;
         private System.Windows.Forms.Button getMidPointButt;
+        private System.Windows.Forms.Button button1;
     }
 }
