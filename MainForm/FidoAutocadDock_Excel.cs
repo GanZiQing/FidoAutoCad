@@ -174,7 +174,7 @@ namespace FidoAutoCad.Forms
                 SubscribeToExcelStatus();
                 UpdateExcelStatus(true, "NA");
                 RefreshActiveWB(false);
-                MessageBox.Show("Sucessfully attached to excel");
+                //MessageBox.Show("Sucessfully attached to excel");
             }
             catch (Exception ex)
             {

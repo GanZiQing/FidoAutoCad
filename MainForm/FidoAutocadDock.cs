@@ -70,8 +70,9 @@ namespace FidoAutoCad.Forms
 
                 #region Get Rounding and Conversion Factors
                 {
-                    (double roundFactor, double distConvFactor, double areaConvFactor) = GetConversionFactors();
-                    printProperties.SetConversionFactors(roundFactor, distConvFactor, areaConvFactor);
+                    //(double roundFactor, double distConvFactor, double areaConvFactor, RoundingMode roundMode) = GetConversionFactors();
+                    //printProperties.SetConversionFactors(roundFactor, distConvFactor, areaConvFactor);
+                    printProperties.GetConversionFactorFromForm(this);
                 }
                 #endregion
 
@@ -184,7 +185,7 @@ namespace FidoAutoCad.Forms
             optionsForm.ShowDialog();
         }
 
-        private (double roundFactor, double distConvFactor, double areaConvFactor) GetConversionFactors()
+        public (double roundFactor, double distConvFactor, double areaConvFactor, RoundMode roundMode) GetConversionFactors()
         {
             double roundFactor = double.NaN;
             double distConvFactor = double.NaN;
@@ -201,244 +202,44 @@ namespace FidoAutoCad.Forms
             {
                 areaConvFactor = ((AttributeTextBox)attributes["areaConvOptions_AC"]).GetDoubleFromTextBox();
             }
-            return (roundFactor, distConvFactor, areaConvFactor);
-        }
 
-        #endregion
-
-        #region Get Coordinates - old
-        private void getUcsButt_Click(object sender, EventArgs e)
-        {
-            try
+            #region Round Mode
+            string roundModeString = roundTypeComboBox.Text.ToLower();
+            RoundMode roundMode;
+            switch (roundModeString)
             {
-                #region Checks
-                CheckIfExcelIsAttached();
-                #endregion
-
-                #region Autocad Transaction
-                List<double[,]> allCoords = new List<double[,]>();
-                List<string> allTypes = new List<string>();
-
-                (Document acDoc, Editor editor, Database acDb) = GetAcadDoc();
-                using (acDoc.LockDocument())
-                {
-                    try
-                    {
-                        using (Transaction acTrans = acDb.TransactionManager.StartTransaction())
-                        {
-                            ObjectId[] selectedObjIds = null;
-                            try { selectedObjIds = GetAcadSelectedObjectID(acTrans, editor, skipLockCheck.Checked); }
-                            catch (Exception ex)
-                            {
-                                editor.WriteMessage("Fido: Operation terminated. " + ex.Message + Environment.NewLine); return;
-                            }
-
-                            int skippedInvalidCount = 0;
-                            foreach (ObjectId objId in selectedObjIds)
-                            {
-                                dynamic dynEnt = acTrans.GetObject(objId, OpenMode.ForRead) as Entity;
-                                double[,] coord = GetCoordinates(dynEnt);
-
-                                if (skipInvalidCheck.Checked && double.IsNaN(coord[0, 0]))
-                                {
-                                    skippedInvalidCount++;
-                                    continue;
-                                }
-
-                                allCoords.Add(coord);
-                                allTypes.Add(dynEnt.AcadObject.ObjectName);
-                            }
-                            editor.WriteMessage($"Fido: {skippedInvalidCount} invalid object(s)." + Environment.NewLine);
-                        }
-                    }
-                    catch (Exception ex) { throw new Exception("Error in autocad transaction" + ex.Message); }
-                }
-                #endregion
-
-                #region Form print object
-                if (allCoords.Count == 0) { throw new Exception("Nothing found to print"); }
-                // Get number of rows
-                int totalRows = 0;
-                foreach (double[,] coord in allCoords)
-                {
-                    totalRows += coord.GetLength(0);
-                }
-                object[,] printObject = new object[totalRows, 5];
-
-                int currentRowNum = 0;
-                int objectNum = 0;
-
-                foreach (double[,] coord in allCoords)
-                {
-                    // Column 1 - object number and type
-                    printObject[currentRowNum, 0] = $"{objectNum + 1}.{allTypes[objectNum]}";
-                    objectNum += 1;
-
-                    for (int coordRowNum = 0; coordRowNum < coord.GetLength(0); coordRowNum++)
-                    {
-                        // Column 2 - number
-                        printObject[currentRowNum, 1] = coordRowNum + 1;
-
-                        // Column 3 to 5 - coordinates
-                        printObject[currentRowNum, 2] = coord[coordRowNum, 0];
-                        printObject[currentRowNum, 3] = coord[coordRowNum, 1];
-                        if (coord.GetLength(1) > 2)
-                        {
-                            printObject[currentRowNum, 4] = coord[coordRowNum, 2];
-                        }
-                        currentRowNum += 1;
-                    }
-                }
-
-                ReplaceNaN(ref printObject);
-                #endregion
-
-                #region Write to Excel
-                editor.WriteMessage($"Fido: Begin write to excel." + Environment.NewLine);
-                WriteObjectToExcelRange(excelApp, null, 0, 0, true, printObject);
-                editor.WriteMessage($"Fido: Coordinates written to excel. Operation completed." + Environment.NewLine);
-                #endregion
+                case "nearest":
+                    roundMode = RoundMode.Nearest;
+                    break;
+                case "ceiling":
+                    roundMode = RoundMode.Ceiling;
+                        break;
+                case "floor":
+                    roundMode = RoundMode.Floor;
+                    break;
+                case "ceiling (abs)":
+                    roundMode = RoundMode.CeilingAbs;
+                    break;
+                case "floor (abs)":
+                    roundMode = RoundMode.FloorAbs;
+                    break;
+                default:
+                    throw new Exception($"Round mode {roundModeString} is undefined");
             }
-            catch (Exception ex) { MessageBox.Show(ex.Message, "Error"); }
-
+            #endregion
+            return (roundFactor, distConvFactor, areaConvFactor, roundMode);
         }
         #endregion
 
         #region Get Coordinates or Mid Points
-        private void getCoordinatesButt_Click2(object sender, EventArgs e)
-        {
-            try
-            {
-                #region Checks
-                CheckIfExcelIsAttached();
-                (double roundFactor, double distConvFactor, double areaConvFactor) = GetConversionFactors();
-                #endregion
-
-                #region Get Coordinates in WCS
-                List<double[,]> allCoords = new List<double[,]>();
-                List<string> allTypes = new List<string>();
-
-                (Document acDoc, Editor editor, Database acDb) = GetAcadDoc();
-                using (acDoc.LockDocument())
-                {
-                    try
-                    {
-                        using (Transaction acTrans = acDb.TransactionManager.StartTransaction())
-                        {
-                            ObjectId[] selectedObjIds = null;
-                            try { selectedObjIds = GetAcadSelectedObjectID(acTrans, editor, skipLockCheck.Checked); }
-                            catch (Exception ex)
-                            {
-                                editor.WriteMessage("Fido: Operation terminated. " + ex.Message + Environment.NewLine); return;
-                            }
-
-                            int skippedInvalidCount = 0;
-                            foreach (ObjectId objId in selectedObjIds)
-                            {
-                                dynamic dynEnt = acTrans.GetObject(objId, OpenMode.ForRead) as Entity;
-                                double[,] coord = GetCoordinates(dynEnt);
-
-                                if (skipInvalidCheck.Checked && double.IsNaN(coord[0, 0]))
-                                {
-                                    skippedInvalidCount++;
-                                    continue;
-                                }
-
-                                allCoords.Add(coord);
-                                allTypes.Add(dynEnt.AcadObject.ObjectName);
-                            }
-                            editor.WriteMessage($"Fido: {skippedInvalidCount} invalid object(s)." + Environment.NewLine);
-                        }
-                    }
-                    catch (Exception ex) { throw new Exception("Error in autocad transaction" + ex.Message); }
-                }
-                #endregion
-
-                #region Transform in UCS
-                if (allCoords.Count == 0) { throw new Exception("Nothing found to print"); }
-                if (translateByUcsCheck.Checked) { TransformCoordByCs(ref allCoords, editor); }
-                #endregion
-
-                #region Convert Distances
-                if (!double.IsNaN(distConvFactor))
-                {
-                    foreach (double[,] coord in allCoords)
-                    {
-                        for (int coordRowNum = 0; coordRowNum < coord.GetLength(0); coordRowNum++)
-                        {
-                            for (int coordColNum = 0; coordColNum < coord.GetLength(1); coordColNum++)
-                            {
-                                coord[coordRowNum, coordColNum] = coord[coordRowNum, coordColNum] * distConvFactor;
-                            }
-                        }
-                    }
-                }
-                #endregion
-
-                #region Round Values
-                if (!double.IsNaN(roundFactor))
-                {
-                    foreach (double[,] coord in allCoords)
-                    {
-                        for (int coordRowNum = 0; coordRowNum < coord.GetLength(0); coordRowNum++)
-                        {
-                            for (int coordColNum = 0; coordColNum < coord.GetLength(1); coordColNum++)
-                            {
-                                coord[coordRowNum, coordColNum] = RoundDouble(coord[coordRowNum, coordColNum], roundFactor);
-                            }
-                        }
-                    }
-                }
-                #endregion
-
-                #region Form print object
-                // Get number of rows
-                (int totalRows, _) = TwoDArrayFunctions.GetSizeOfConcat(allCoords);
-                object[,] printObject = new object[totalRows, 5];
-
-                int currentRowNum = 0;
-                int objectNum = 0;
-
-                foreach (double[,] coord in allCoords)
-                {
-                    // Column 1 - object number and type
-                    printObject[currentRowNum, 0] = $"{objectNum + 1}.{allTypes[objectNum]}";
-                    objectNum += 1;
-
-                    for (int coordRowNum = 0; coordRowNum < coord.GetLength(0); coordRowNum++)
-                    {
-                        // Column 2 - number
-                        printObject[currentRowNum, 1] = coordRowNum + 1;
-
-                        // Column 3 to 5 - coordinates
-                        printObject[currentRowNum, 2] = coord[coordRowNum, 0];
-                        printObject[currentRowNum, 3] = coord[coordRowNum, 1];
-                        if (coord.GetLength(1) > 2)
-                        {
-                            printObject[currentRowNum, 4] = coord[coordRowNum, 2];
-                        }
-                        currentRowNum += 1;
-                    }
-                }
-
-                ReplaceNaN(ref printObject);
-                #endregion
-
-                #region Write to Excel
-                editor.WriteMessage($"Fido: Begin write to excel." + Environment.NewLine);
-                WriteObjectToExcelRange(excelApp, null, 0, 0, true, printObject);
-                editor.WriteMessage($"Fido: Coordinates written to excel. Operation completed." + Environment.NewLine);
-                #endregion
-            }
-            catch (Exception ex) { MessageBox.Show(ex.Message, "Error"); }
-        }
         private void getMidPointButt_Click(object sender, EventArgs e)
         {
             try
             {
                 #region Checks
                 CheckIfExcelIsAttached();
-                (double roundFactor, double distConvFactor, double areaConvFactor) = GetConversionFactors();
+                //(double roundFactor, double distConvFactor, double areaConvFactor, RoundingMode roundMode) = GetConversionFactors();
+                ConversionFactors cF = new ConversionFactors(this);
                 #endregion
 
                 #region Get Coordinates in WCS
@@ -499,19 +300,21 @@ namespace FidoAutoCad.Forms
                     acadObj.CalculateMidPoints();
                     #endregion
 
-                    #region Convert Distances
-                    if (!double.IsNaN(distConvFactor))
-                    {
-                        acadObj.ConvertMidPoints(distConvFactor);
-                    }
-                    #endregion
+                    //#region Convert Distances
+                    //if (!double.IsNaN(cF.distConvFactor))
+                    //{
+                    //    acadObj.ConvertMidPoints(cF);
+                    //}
+                    //#endregion
 
-                    #region Round Values
-                    if (!double.IsNaN(roundFactor))
-                    {
-                        acadObj.RoundMidPoints(roundFactor);
-                    }
-                    #endregion
+                    //#region Round Values
+                    //if (!double.IsNaN(cF.roundFactor))
+                    //{
+                    //    acadObj.RoundMidPoints(cF);
+                    //}
+                    //#endregion
+
+                    acadObj.ConvertAndRoundMidPoints(cF);
 
                     #region Get Number of Rows
                     totalPrintRows += acadObj.midPoints.GetLength(0);
@@ -546,7 +349,8 @@ namespace FidoAutoCad.Forms
             {
                 #region Checks
                 CheckIfExcelIsAttached();
-                (double roundFactor, double distConvFactor, double areaConvFactor) = GetConversionFactors();
+                //(double roundFactor, double distConvFactor, double areaConvFactor, RoundingMode roundMode) = GetConversionFactors();
+                ConversionFactors cF = new ConversionFactors(this);
                 #endregion
 
                 #region Get Coordinates in WCS
@@ -603,19 +407,21 @@ namespace FidoAutoCad.Forms
                     }
                     #endregion
 
-                    #region Convert Distances
-                    if (!double.IsNaN(distConvFactor))
-                    {
-                        acadObj.ConvertCoordinates(distConvFactor);
-                    }
-                    #endregion
+                    //#region Convert Distances
+                    //if (!double.IsNaN(cF.distConvFactor))
+                    //{
+                    //    acadObj.ConvertCoordinates(cF);
+                    //}
+                    //#endregion
 
-                    #region Round Values
-                    if (!double.IsNaN(roundFactor))
-                    {
-                        acadObj.RoundCoordinates(roundFactor);
-                    }
-                    #endregion
+                    //#region Round Values
+                    //if (!double.IsNaN(cF.roundFactor))
+                    //{
+                    //    acadObj.RoundCoordinates(cF);
+                    //}
+                    //#endregion
+
+                    acadObj.ConvertAndRoundCoordinates(cF);
 
                     #region Get Number of Rows
                     totalPrintRows += acadObj.coords.GetLength(0);
@@ -912,14 +718,24 @@ namespace FidoAutoCad.Forms
         #endregion
 
         #region Convert and round Values
-        double roundFactor;
-        double distConvFactor;
-        double areaConvFactor;
+        //double roundFactor;
+        //double distConvFactor;
+        //double areaConvFactor;
+        //public void SetConversionFactors(double roundFactor, double distConvFactor, double areaConvFactor)
+        //{
+        //    this.roundFactor = roundFactor;
+        //    this.distConvFactor = distConvFactor;
+        //    this.areaConvFactor = areaConvFactor;
+        //}
+        ConversionFactors conversionFactors;
         public void SetConversionFactors(double roundFactor, double distConvFactor, double areaConvFactor)
         {
-            this.roundFactor = roundFactor;
-            this.distConvFactor = distConvFactor;
-            this.areaConvFactor = areaConvFactor;
+            conversionFactors = new ConversionFactors(roundFactor, distConvFactor, areaConvFactor);
+        }
+
+        public void GetConversionFactorFromForm(FidoAutocadDock parentForm)
+        {
+            conversionFactors = new ConversionFactors(parentForm);
         }
         public void ConvertAndRoundAll()
         {
@@ -928,8 +744,105 @@ namespace FidoAutoCad.Forms
                 AcadPropertyType property = (AcadPropertyType)properties[propertyName];
                 if (property.isActive)
                 {
-                    property.ConvertAndRoundContent(roundFactor, distConvFactor, areaConvFactor);
+                    property.ConvertAndRoundContent(conversionFactors);
                 }
+            }
+        }
+        #endregion
+    }
+
+    public class ConversionFactors
+    {
+        // Represents conversion factors for rounding and unit conversion
+        public double roundFactor { get; set; }
+        public double distConvFactor { get; set; }
+        public double areaConvFactor { get; set; }
+        public RoundMode roundMode { get; set; } = RoundMode.Nearest;
+        public ConversionFactors(double roundFactor, double distConvFactor, double areaConvFactor)
+        {
+            this.roundFactor = roundFactor;
+            this.distConvFactor = distConvFactor;
+            this.areaConvFactor = areaConvFactor;
+        }
+
+        public ConversionFactors()
+        {
+            this.roundFactor = double.NaN;
+            this.distConvFactor = double.NaN;
+            this.areaConvFactor = double.NaN;
+        }
+        public ConversionFactors(FidoAutocadDock parentForm)
+        {
+            (this.roundFactor, this.distConvFactor, this.areaConvFactor, this.roundMode) = parentForm.GetConversionFactors();
+        }
+
+        #region Modify Array
+        public void ConvertAndRoundArray(ref double[,] array, bool isDist)
+        {
+            if (isDist)
+            {
+                if (!(double.IsNaN(distConvFactor)))
+                {
+                    TwoDArrayFunctions.MultiplyArray(ref array, distConvFactor);
+                }
+            }
+            else // Is Area
+            {
+                if (!(double.IsNaN(areaConvFactor)))
+                {
+                    TwoDArrayFunctions.MultiplyArray(ref array, areaConvFactor);
+                }
+            }
+
+            if (!(double.IsNaN(roundFactor)))
+            {
+                TwoDArrayFunctions.RoundArray(ref array, roundFactor, roundMode);
+            }               
+        }
+
+        public void ConvertAndRoundArray(ref double[] array, bool isDist)
+        {
+            if (isDist)
+            {
+                if (!(double.IsNaN(distConvFactor)))
+                {
+                    TwoDArrayFunctions.MultiplyArray(ref array, distConvFactor);
+                }
+            }
+            else // Is Area
+            {
+                if (!(double.IsNaN(areaConvFactor)))
+                {
+                    TwoDArrayFunctions.MultiplyArray(ref array, areaConvFactor);
+                }
+            }
+
+            if (!(double.IsNaN(roundFactor)))
+            {
+                TwoDArrayFunctions.RoundArray(ref array, roundFactor, roundMode);
+            }
+        }
+
+        public void ConvertAndRoundArray(ref object[] array, bool isDist)
+        {
+            if (isDist)
+            {
+                if (!(double.IsNaN(distConvFactor)))
+                {
+                    TwoDArrayFunctions.MultiplyArray(ref array, distConvFactor);
+                }
+            }
+            else // Is Area
+            {
+                if (!(double.IsNaN(areaConvFactor)))
+                {
+                    TwoDArrayFunctions.MultiplyArray(ref array, areaConvFactor);
+                }
+            }
+
+            if (!(double.IsNaN(roundFactor)))
+            {
+                TwoDArrayFunctions.RoundArray(ref array, roundFactor, roundMode);
             }
         }
         #endregion
@@ -939,59 +852,70 @@ namespace FidoAutoCad.Forms
     {
         // Represents a Acad property type
         // Each array contains the values of that property type for all objects
-        public object[] contentArray { get; set; }
+        public object[] contentArray;
         public AcadPropertyType(string name, int initialOrderNum, bool status = true) : base(name, initialOrderNum, status) { }
         public AcadPropertyType(string name, int initialOrderNum, int selectedOrderNum) : base(name, initialOrderNum, selectedOrderNum) { }
 
-        public void ConvertAndRoundContent(double roundFactor, double distConvFactor, double areaConvFactor)
+        public void ConvertAndRoundContent(ConversionFactors cF)
         {
             if (name == "Type") { return; }
+            #region Old
+            //#region Convert Values
+            //if (name == "Length")
+            //{
+            //    if (!double.IsNaN(cF.distConvFactor))
+            //    {
+            //        for (int i = 0; i < contentArray.Length; i++)
+            //        {
+            //            if (contentArray[i] is double val)
+            //            {
+            //                if (!double.IsNaN(val))
+            //                    val *= cF.distConvFactor;
 
-            #region Convert Values
+            //                contentArray[i] = val;
+            //            }
+            //        }
+            //    }
+            //}
+            //else if (name == "Area")
+            //{
+            //    if (!double.IsNaN(cF.areaConvFactor))
+            //    {
+            //        for (int i = 0; i < contentArray.Length; i++)
+            //        {
+            //            if (contentArray[i] is double val)
+            //            {
+            //                if (!double.IsNaN(val))
+            //                    val *= cF.areaConvFactor;
+
+            //                contentArray[i] = val;
+            //            }
+            //        }
+            //    }
+            //}
+            //#endregion
+
+            //#region Round Values
+            //if (!double.IsNaN(cF.roundFactor))
+            //{
+            //    for (int i = 0; i < contentArray.Length; i++)
+            //    {
+            //        if (!(contentArray[i] is double)) { continue; }
+            //        contentArray[i] = RoundDouble((double)contentArray[i], cF.roundFactor);
+            //    }
+            //}
+            //#endregion
+            #endregion
+
             if (name == "Length")
             {
-                if (!double.IsNaN(distConvFactor))
-                {
-                    for (int i = 0; i < contentArray.Length; i++)
-                    {
-                        if (contentArray[i] is double val)
-                        {
-                            if (!double.IsNaN(val))
-                                val *= distConvFactor;
-
-                            contentArray[i] = val;
-                        }
-                    }
-                }
+                cF.ConvertAndRoundArray(ref contentArray, true);
             }
             else if (name == "Area")
             {
-                if (!double.IsNaN(areaConvFactor))
-                {
-                    for (int i = 0; i < contentArray.Length; i++)
-                    {
-                        if (contentArray[i] is double val)
-                        {
-                            if (!double.IsNaN(val))
-                                val *= areaConvFactor;
-
-                            contentArray[i] = val;
-                        }
-                    }
-                }
+                cF.ConvertAndRoundArray(ref contentArray, false);
             }
-            #endregion
-
-            #region Round Values
-            if (!double.IsNaN(roundFactor))
-            {
-                for (int i = 0; i < contentArray.Length; i++)
-                {
-                    contentArray[i] = RoundDouble((double)contentArray[i], roundFactor);
-                }
-            }
-            #endregion
-        }
+    }
     }
     #endregion
 
@@ -1174,17 +1098,27 @@ namespace FidoAutoCad.Forms
         #endregion
 
         #region Rounding and Conversion
-        public void ConvertCoordinates(double distConvFactor)
-            => TwoDArrayFunctions.MultiplyArray(coords, distConvFactor);
+        //public void ConvertCoordinates(ConversionFactors cF)
+        //    => TwoDArrayFunctions.MultiplyArray(coords, cF.distConvFactor);
 
-        public void ConvertMidPoints(double distConvFactor)
-            => TwoDArrayFunctions.MultiplyArray(midPoints, distConvFactor);
+        //public void ConvertMidPoints(ConversionFactors cF)
+        //    => TwoDArrayFunctions.MultiplyArray(midPoints, cF.distConvFactor);
 
-        public void RoundCoordinates(double roundFactor)
-            => TwoDArrayFunctions.RoundArray(coords, roundFactor);
+        //public void RoundCoordinates(ConversionFactors cF)
+        //    => TwoDArrayFunctions.RoundArray(coords, cF.roundFactor);
 
-        public void RoundMidPoints(double roundFactor)
-            => TwoDArrayFunctions.RoundArray(midPoints, roundFactor);
+        //public void RoundMidPoints(ConversionFactors cF)
+        //    => TwoDArrayFunctions.RoundArray(midPoints, cF.roundFactor);
+
+        public void ConvertAndRoundCoordinates(ConversionFactors cF)
+        {
+            cF.ConvertAndRoundArray(ref coords, true);
+        }
+
+        public void ConvertAndRoundMidPoints(ConversionFactors cF)
+        {
+            cF.ConvertAndRoundArray(ref midPoints, true);
+        }
 
         #endregion
     }

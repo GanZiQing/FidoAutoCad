@@ -12,6 +12,7 @@ using System.Text;
 using System.Threading.Tasks;
 //using System.Windows;
 using System.Windows.Forms;
+using static FidoAutoCad.CommonUtilities;
 using Action = System.Action;
 using Application = Microsoft.Office.Interop.Excel.Application;
 using Button = System.Windows.Forms.Button;
@@ -21,7 +22,7 @@ using Button = System.Windows.Forms.Button;
 
 namespace FidoAutoCad
 {
-    static class CommonUtilities
+    static public class CommonUtilities
     {
         #region Read Data from Excel
         #region Doubles
@@ -1617,11 +1618,13 @@ namespace FidoAutoCad
             }
             return rounded;
         }
-        public enum RoundingMode
+        public enum RoundMode
         {
             Nearest,
-            Up,
-            Down
+            Ceiling,
+            Floor,
+            CeilingAbs,
+            FloorAbs
         }
 
         public static void ReplaceNaN(ref object[,] obj, string replaceValue = "NaN")
@@ -1640,7 +1643,7 @@ namespace FidoAutoCad
         #endregion
 
         #region Rounding
-        public static double RoundDouble(double value, double n, RoundingMode mode = RoundingMode.Nearest)
+        public static double RoundDouble(double value, double n, RoundMode mode = RoundMode.Nearest)
         {
             if (n == 0) return value; // avoid divide by zero
 
@@ -1648,17 +1651,32 @@ namespace FidoAutoCad
 
             switch (mode)
             {
-                case RoundingMode.Nearest:
+                case RoundMode.Nearest:
                     rounded = Math.Round(value / n) * n;
                     break;
 
-                case RoundingMode.Up:
+                case RoundMode.Ceiling:
                     rounded = Math.Ceiling(value / n) * n;
                     break;
 
-                case RoundingMode.Down:
+                case RoundMode.Floor:
                     rounded = Math.Floor(value / n) * n;
                     break;
+
+                case RoundMode.CeilingAbs:
+                    {
+                        double absValue = Math.Abs(value);
+                        rounded = Math.Ceiling(absValue / n) * n;
+                        if (value < 0) { rounded = -rounded; }
+                        break;
+                    }
+                case RoundMode.FloorAbs:
+                    {
+                        double absValue = Math.Abs(value);
+                        rounded = Math.Floor(absValue / n) * n;
+                        if (value < 0) { rounded = -rounded; }
+                        break;
+                    }
 
                 default:
                     throw new ArgumentOutOfRangeException(nameof(mode), "Unsupported rounding mode.");
@@ -1937,7 +1955,7 @@ namespace FidoAutoCad
         #endregion
 
         #region Rounding and Scaling Arrays
-        public static void MultiplyArray(double[,] array, double factor)
+        public static void MultiplyArray(ref double[,] array, double factor)
         {
             int rows = array.GetLength(0);
             int cols = array.GetLength(1);
@@ -1951,7 +1969,29 @@ namespace FidoAutoCad
             }
         }
 
-        public static void RoundArray(double[,] array, double roundFactor)
+        public static void MultiplyArray(ref double[] array, double factor)
+        {
+            int rows = array.GetLength(0);
+
+            for (int r = 0; r < rows; r++)
+            {
+                array[r] *= factor;
+            }
+        }
+
+        public static void MultiplyArray(ref object[] array, double factor)
+        {
+            int rows = array.GetLength(0);
+
+            for (int r = 0; r < rows; r++)
+            {
+                if (array[r] is double)
+                {
+                    array[r] = (double)array[r]*factor;
+                }
+            }
+        }
+        public static void RoundArray(ref double[,] array, double roundFactor, RoundMode roundMode)
         {
             int rows = array.GetLength(0);
             int cols = array.GetLength(1);
@@ -1960,15 +2000,38 @@ namespace FidoAutoCad
             {
                 for (int c = 0; c < cols; c++)
                 {
-                    array[r, c] = CommonUtilities.RoundDouble(array[r, c], roundFactor);
+                    array[r, c] = CommonUtilities.RoundDouble(array[r, c], roundFactor, roundMode);
+                }
+            }
+        }
+        public static void RoundArray(ref double[] array, double roundFactor, RoundMode roundMode)
+        {
+            int rows = array.GetLength(0);
+            int cols = array.GetLength(1);
+
+            for (int r = 0; r < rows; r++)
+            {
+                array[r] = CommonUtilities.RoundDouble(array[r], roundFactor, roundMode);
+            }
+        }
+        public static void RoundArray(ref object[] array, double roundFactor, RoundMode roundMode)
+        {
+            int rows = array.GetLength(0);
+
+            for (int r = 0; r < rows; r++)
+            {
+                if (array[r] is double)
+                {
+                    array[r] = CommonUtilities.RoundDouble((double)array[r], roundFactor, roundMode);
                 }
             }
         }
         #endregion
 
+
     }
 
-    
+
     class CustomFolderBrowser
     {
         OpenFileDialog dialog = new OpenFileDialog();

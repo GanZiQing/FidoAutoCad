@@ -59,7 +59,6 @@
             this.attachRunningExcel = new System.Windows.Forms.Button();
             this.detachExcel = new System.Windows.Forms.Button();
             this.tabControl1 = new System.Windows.Forms.TabControl();
-            this.button1 = new System.Windows.Forms.Button();
             this.tabPage1.SuspendLayout();
             this.groupBox3.SuspendLayout();
             this.Settings.SuspendLayout();
@@ -146,7 +145,6 @@
             // 
             // Settings
             // 
-            this.Settings.Controls.Add(this.button1);
             this.Settings.Controls.Add(this.roundTypeComboBox);
             this.Settings.Controls.Add(this.translateByUcsCheck);
             this.Settings.Controls.Add(this.label1);
@@ -166,11 +164,19 @@
             // 
             // roundTypeComboBox
             // 
+            this.roundTypeComboBox.AutoCompleteCustomSource.AddRange(new string[] {
+            "nearest",
+            "ceiling",
+            "floor",
+            "ceiling (abs)",
+            "floor (abs)"});
             this.roundTypeComboBox.FormattingEnabled = true;
             this.roundTypeComboBox.Items.AddRange(new object[] {
             "nearest",
             "ceiling",
-            "floor"});
+            "floor",
+            "ceiling (abs)",
+            "floor (abs)"});
             this.roundTypeComboBox.Location = new System.Drawing.Point(188, 33);
             this.roundTypeComboBox.Name = "roundTypeComboBox";
             this.roundTypeComboBox.Size = new System.Drawing.Size(121, 32);
@@ -416,17 +422,6 @@
             this.tabControl1.Size = new System.Drawing.Size(539, 1094);
             this.tabControl1.TabIndex = 13;
             // 
-            // button1
-            // 
-            this.button1.Location = new System.Drawing.Point(261, 221);
-            this.button1.Margin = new System.Windows.Forms.Padding(4);
-            this.button1.Name = "button1";
-            this.button1.Size = new System.Drawing.Size(238, 39);
-            this.button1.TabIndex = 61;
-            this.button1.Text = "Get Coordinates";
-            this.button1.UseVisualStyleBackColor = true;
-            this.button1.Click += new System.EventHandler(this.getCoordinatesButt_Click2);
-            // 
             // FidoAutocadDock
             // 
             this.AutoScaleDimensions = new System.Drawing.SizeF(11F, 24F);
@@ -477,6 +472,5 @@
         private System.Windows.Forms.ComboBox roundTypeComboBox;
         private System.Windows.Forms.Label label4;
         private System.Windows.Forms.Button getMidPointButt;
-        private System.Windows.Forms.Button button1;
     }
 }
